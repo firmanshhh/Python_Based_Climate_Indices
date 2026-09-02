@@ -1,0 +1,16 @@
+# Language classification for GitHub
+*.py linguist-language=Python
+*.md linguist-language=Markdown
+*.ipynb linguist-language=JupyterNotebook
+
+# Documentation files
+docs/* linguist-documentation=true
+
+# Examples directory
+examples/* linguist-vendored=true
+
+# Test files
+tests/* linguist-vendored=true
+
+# Generated files to ignore in diffs
+*.ipynb diff=jupytext

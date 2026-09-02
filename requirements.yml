@@ -1,0 +1,20 @@
+name: rain-indices
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy>=1.24
+  - pandas>=2.0
+  - xarray>=2023.1
+  - dask>=2023.1
+  - netcdf4>=1.6          # dibutuhkan xarray untuk baca/tulis file .nc
+  - bottleneck             # opsional, mempercepat skipna reductions (mean/sum/dll) di xarray
+  # --- dipakai di notebook contoh (01_..., 02_...) ---
+  - matplotlib>=3.7
+  - jupyter
+  - ipykernel
+  - nbformat
+  - nbconvert
+  - pip
+  - pip:
+      - dask[array]>=2023.1

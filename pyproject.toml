@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "indek_ekstrim"
+version = "0.1.0"
+description = "Perhitungan index curah hujan ETCCDI-style berbasis xarray + dask"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "xarray",
+    "dask",
+    "pandas",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
