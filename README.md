@@ -1,4 +1,4 @@
-# rain_indices_pkg
+# Climate Extremes Indices Library
 
 Package untuk menghitung index iklim (curah hujan & suhu, gaya ETCCDI) dari
 data `xarray` — baik data **grid** (dims `time, lat, lon`) maupun data
