@@ -57,11 +57,6 @@ RAIN_INDICES: Dict[str, IndexSpec] = {
     "CDD":     IndexSpec("cdd"),
     "CWD":     IndexSpec("cwd"),
     "SDII":    IndexSpec("sdii"),
-
-    "R95P":    IndexSpec("RqP", {"q": 0.95}, kind="quantile"),
-    "R99P":    IndexSpec("RqP", {"q": 0.99}, kind="quantile"),
-    "R95PTOT": IndexSpec("RqPtot", {"q": 0.95}, kind="quantile"),
-    "R99PTOT": IndexSpec("RqPtot", {"q": 0.99}, kind="quantile"),
 }
 
 # ---------------------------------------------------------------------------
@@ -107,7 +102,7 @@ TEMP_INDICES: Dict[str, IndexSpec] = {
 }
 
 @dataclass(frozen=True)
-class PercentileIndexSpec:
+class TempPercentileIndexSpec:
     var: str                              # 'tasmax' / 'tasmin' / 'tas'
     q: float                              # 0.90 atau 0.10
     op: Literal["above", "below"]         # bandingkan '>' atau '<' threshold
@@ -117,24 +112,36 @@ class PercentileIndexSpec:
     # 'spell' -> WSDI/CSDI: total hari dalam runtun >= min_run hari berturut2
     min_run: int = 6                      # dipakai hanya kalau mode='spell'
     
-PERCENTILE_INDICES: Dict[str, PercentileIndexSpec] = {
+TEMP_PERCENTILE_INDICES: Dict[str, TempPercentileIndexSpec] = {
     # --- Persentase hari (relatif terhadap total hari per tahun/musim) ---
-    "tg90": PercentileIndexSpec("tas",    0.90, "above", "pct"),
-    "tg10": PercentileIndexSpec("tas",    0.10, "below", "pct"),
-    "tn90": PercentileIndexSpec("tasmin", 0.90, "above", "pct"),
-    "tn10": PercentileIndexSpec("tasmin", 0.10, "below", "pct"),
-    "tx90": PercentileIndexSpec("tasmax", 0.90, "above", "pct"),
-    "tx10": PercentileIndexSpec("tasmax", 0.10, "below", "pct"),
+    "tg90": TempPercentileIndexSpec("tas",    0.90, "above", "pct"),
+    "tg10": TempPercentileIndexSpec("tas",    0.10, "below", "pct"),
+    "tn90": TempPercentileIndexSpec("tasmin", 0.90, "above", "pct"),
+    "tn10": TempPercentileIndexSpec("tasmin", 0.10, "below", "pct"),
+    "tx90": TempPercentileIndexSpec("tasmax", 0.90, "above", "pct"),
+    "tx10": TempPercentileIndexSpec("tasmax", 0.10, "below", "pct"),
  
     # --- Jumlah hari absolut (bukan persen) ---
-    "tg90abs": PercentileIndexSpec("tas",    0.90, "above", "abs"),
-    "tg10abs": PercentileIndexSpec("tas",    0.10, "below", "abs"),
-    "tn90abs": PercentileIndexSpec("tasmin", 0.90, "above", "abs"),
-    "tn10abs": PercentileIndexSpec("tasmin", 0.10, "below", "abs"),
-    "tx90abs": PercentileIndexSpec("tasmax", 0.90, "above", "abs"),
-    "tx10abs": PercentileIndexSpec("tasmax", 0.10, "below", "abs"),
+    "tg90abs": TempPercentileIndexSpec("tas",    0.90, "above", "abs"),
+    "tg10abs": TempPercentileIndexSpec("tas",    0.10, "below", "abs"),
+    "tn90abs": TempPercentileIndexSpec("tasmin", 0.90, "above", "abs"),
+    "tn10abs": TempPercentileIndexSpec("tasmin", 0.10, "below", "abs"),
+    "tx90abs": TempPercentileIndexSpec("tasmax", 0.90, "above", "abs"),
+    "tx10abs": TempPercentileIndexSpec("tasmax", 0.10, "below", "abs"),
  
     # --- Spell duration ---
-    "wsdi": PercentileIndexSpec("tasmax", 0.90, "above", "spell", min_run=6),  # Warm Spell
-    "csdi": PercentileIndexSpec("tasmin", 0.10, "below", "spell", min_run=6),  # Cold Spell (bonus, pasangan standar WSDI)
+    "wsdi": TempPercentileIndexSpec("tasmax", 0.90, "above", "spell", min_run=6),  # Warm Spell
+    "csdi": TempPercentileIndexSpec("tasmin", 0.10, "below", "spell", min_run=6),  # Cold Spell (bonus, pasangan standar WSDI)
+}
+
+@dataclass(frozen=True)
+class RainPercentileIndexSpec:
+    q: float                          # 0.95 atau 0.99
+    mode: Literal["sum", "pct"]       # 'sum' -> R95P/R99P (total mm), 'pct' -> R95PTOT/R99PTOT (%)
+ 
+RAIN_PERCENTILE_INDICES: Dict[str, RainPercentileIndexSpec] = {
+    "R95P":    RainPercentileIndexSpec(0.95, "sum"),
+    "R99P":    RainPercentileIndexSpec(0.99, "sum"),
+    "R95PTOT": RainPercentileIndexSpec(0.95, "pct"),
+    "R99PTOT": RainPercentileIndexSpec(0.99, "pct"),
 }

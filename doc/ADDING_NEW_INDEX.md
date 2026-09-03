@@ -173,6 +173,21 @@ Kalau definisinya mengandung kata-kata seperti: *"persentil ke-N dari
 periode referensi 1961-1990"*, *"relatif terhadap normal/klimatologi"*,
 atau *"durasi spell di atas/bawah threshold"* — ini Pola C.
 
+**Ada 2 varian Pola C, jangan tertukar:**
+
+| | Index suhu (`percentile.py`) | Index curah hujan (`rain_percentile.py`) |
+|---|---|---|
+| Registry | `TEMP_PERCENTILE_INDICES` | `RAIN_PERCENTILE_INDICES` |
+| Threshold | Per **hari-kalender** (dayofyear, window ±N hari) | **Satu nilai tetap** per titik spasial/stasiun |
+| Contoh | `tx90`, `wsdi` | `R95P`, `R99P` |
+| Kenapa beda? | Suhu ekstrim bergantung musim (30°C beda makna di Januari vs Juli) | Curah hujan ekstrim ETCCDI didefinisikan tidak bergantung musim |
+
+Kalau index barumu tentang **suhu**, ikuti pola `percentile.py` di
+bawah. Kalau tentang **curah hujan** (atau variabel lain yang tidak
+musiman), ikuti pola `rain_percentile.py` — lihat bagian
+[Pola C-2](#pola-c-2--index-curah-hujanvariabel-non-musiman-berbasis-persentil)
+di akhir dokumen ini.
+
 ### Langkah-langkah
 
 **1. Cek dulu apakah `mode` yang ada di `percentile.py` sudah cukup:**
@@ -188,7 +203,7 @@ salah satu dari 3 mode di atas → **tidak perlu tulis kode baru sama
 sekali**, cukup tambah entri di `config.py`:
 
 ```python
-PERCENTILE_INDICES: Dict[str, PercentileIndexSpec] = {
+TEMP_PERCENTILE_INDICES: Dict[str, PercentileIndexSpec] = {
     ...
     "my_pctidx": PercentileIndexSpec("tasmax", 0.95, "above", "pct"),
     # var="tasmax", q=0.95, op="above" (bandingkan '>'), mode="pct" (%)
@@ -197,7 +212,7 @@ PERCENTILE_INDICES: Dict[str, PercentileIndexSpec] = {
 
 Langsung bisa dipakai:
 ```python
-result = percentile_indices(ds, base_period=("1961-01-01","1990-12-31"),
+result = temp_percentile_indices(ds, base_period=("1961-01-01","1990-12-31"),
                               indices=["my_pctidx"])
 ```
 
@@ -235,12 +250,66 @@ Untuk index `mode="pct"`, buat data sintetis dengan iklim STASIONER
 tergantung `op`:
 
 ```python
-result = percentile_indices(ds_stationer, base_period=(...), indices=["my_pctidx"])
+result = temp_percentile_indices(ds_stationer, base_period=(...), indices=["my_pctidx"])
 print(float(result["my_pctidx"].mean()))  # harusnya ~ (1-0.95)*100 = 5%, kalau op="above"
 ```
 
 Kalau meleset jauh dari situ, kemungkinan ada bug di arah perbandingan
 (`above` vs `below`) atau di alignment `dayofyear`.
+
+---
+
+## POLA C-2 — Index curah hujan/variabel non-musiman berbasis persentil
+
+**Ciri-ciri:** Sama seperti Pola C, tapi threshold-nya **satu nilai
+tetap** per titik spasial/stasiun (bukan per hari-kalender) — karena
+tidak ada alasan musiman untuk variasi threshold sepanjang tahun.
+Contoh yang sudah ada: `R95P`, `R99P`, `R95PTOT`, `R99PTOT`.
+
+### Langkah-langkah
+
+**1. Cek dulu apakah `mode` yang ada di `rain_percentile.py` sudah cukup:**
+
+| `mode` | Untuk apa |
+|---|---|
+| `"sum"` | Total nilai di atas threshold (mis. R95P) |
+| `"pct"` | Kontribusi (%) nilai di atas threshold terhadap total (mis. R95PTOT) |
+
+Kalau cukup, **tidak perlu kode baru** — cukup tambah entri:
+
+```python
+RAIN_PERCENTILE_INDICES: Dict[str, RainPercentileIndexSpec] = {
+    ...
+    "R90P": RainPercentileIndexSpec(0.90, "sum"),
+}
+```
+
+Langsung dipakai:
+```python
+result = rain_percentile_indices(ds, base_period=("1961-01-01","1990-12-31"),
+                                   indices=["R90P"])
+```
+
+**2. Kalau butuh agregasi baru** — tambah fungsi di `rain_percentile.py`
+(pola sama seperti `_rqp_sum`/`_rqp_pct`), lalu tambah cabang di
+`aggregate_rain_percentile()`.
+
+**3. Test — WAJIB verifikasi threshold benar-benar TETAP** (bukan
+berubah per tahun) dan cocok dengan hitungan manual:
+
+```python
+from rain_indices_pkg.rain_percentile import compute_wet_day_threshold
+
+base_data = ds["pr"].sel(time=slice("1961-01-01","1990-12-31"))
+th = compute_wet_day_threshold(base_data, 0.90)
+print(th.values)  # harus 1 angka per pixel, TIDAK per tahun
+
+# manual check 1 tahun tertentu, pakai threshold di atas (BUKAN dihitung ulang dari tahun itu)
+sub = ds["pr"].sel(time=slice("2015-01-01","2015-12-31")).isel(lat=0, lon=0).values
+manual = float((sub[sub > float(th.isel(lat=0, lon=0))]).sum())
+pipeline_val = float(result["R90P"].sel(year=2015).isel(lat=0, lon=0))
+assert abs(manual - pipeline_val) < 1e-6
+```
 
 ---
 
@@ -251,7 +320,7 @@ Kalau meleset jauh dari situ, kemungkinan ada bug di arah perbandingan
 - [ ] Nama fungsi terdaftar persis sama di `FUNC_MAP` (Pola A/B) —
       cek typo, case-sensitive.
 - [ ] Entri baru di `config.py` (`RAIN_INDICES`/`TEMP_INDICES`/
-      `PERCENTILE_INDICES`) dengan `var`/`var2` yang benar.
+      `TEMP_PERCENTILE_INDICES`) dengan `var`/`var2` yang benar.
 - [ ] **TIDAK** ada perubahan di `pipeline.py`/`engine.py` untuk Pola A
       dan B — kalau sampai perlu ubah, kemungkinan besar index-nya
       salah pola.

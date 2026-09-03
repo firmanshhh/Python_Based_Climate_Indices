@@ -106,33 +106,6 @@ def quant(data, q):
     """Wrapper tipis di atas np.quantile, dipakai untuk R95P/R99P dsb."""
     return np.quantile(data, q)
 
-
-def RqP(data, q=0.95):
-    """Total curah hujan hari basah ekstrim di atas kuantil q."""
-    data = np.asarray(data, dtype=float)
-    if np.all(data == 0) or np.all(np.isnan(data)):
-        return np.nan
-    hh = data[data > 1]
-    if hh.size == 0:
-        return np.nan
-    threshold_q = np.quantile(hh, q=q)
-    return np.nansum(data[data > threshold_q])
-
-
-def RqPtot(data, q=0.95):
-    """Kontribusi (%) curah hujan ekstrim di atas kuantil q terhadap total."""
-    data = np.asarray(data, dtype=float)
-    if np.all(data == 0) or np.all(np.isnan(data)):
-        return np.nan
-    hh = data[data > 1]
-    if hh.size == 0:
-        return np.nan
-    threshold_q = np.quantile(hh, q=q)
-    rqp = np.nansum(data[data > threshold_q])
-    total = np.nansum(hh)
-    return divide(rqp, total) * 100
-
-
 # ---------------------------------------------------------------------------
 # Temperature indices (tidak diubah, sudah vectorized)
 # ---------------------------------------------------------------------------
@@ -223,8 +196,6 @@ FUNC_MAP = {
     'HHnMM': HHnMM,
     'FHnMM': FHnMM,
     'quant': quant,
-    'RqP': RqP,
-    'RqPtot': RqPtot,
     'dtr': dtr,
     'etr': etr,
     'Tm': Tm,

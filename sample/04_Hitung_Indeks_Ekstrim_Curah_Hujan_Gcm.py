@@ -10,8 +10,8 @@ SRC_PATH = "."
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 print("src path terdaftar:", SRC_PATH)
-from indek_ekstrim import rain_indices
-from indek_ekstrim.config import RAIN_INDICES
+from Developing_Python_Based_Climate_Indices.src.indek_ekstrim import rain_indices
+from Developing_Python_Based_Climate_Indices.src.indek_ekstrim.config import RAIN_INDICES
 
 model          = 'MPI-ESM1-2-HR'
 latmin, latmax = -15, 10

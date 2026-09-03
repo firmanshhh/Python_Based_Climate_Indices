@@ -22,9 +22,11 @@ import xarray as xr
 from dask import compute
 
 from .PreProp import convert_units, grouped_dataset
-from .config import RAIN_INDICES, TEMP_INDICES, PERCENTILE_INDICES
+from .config import RAIN_INDICES, TEMP_INDICES, TEMP_PERCENTILE_INDICES, RAIN_PERCENTILE_INDICES
 from .engine import compute_index
 from .percentile import compute_doy_threshold, compute_exceedance, aggregate_index
+from .rain_percentile import compute_wet_day_threshold, aggregate_rain_percentile
+
 
 VALID_SLICE_MODES = ("ANN", "ME", "DJF", "MAM", "JJA", "SON")
 
@@ -32,6 +34,7 @@ VALID_SLICE_MODES = ("ANN", "ME", "DJF", "MAM", "JJA", "SON")
 def rain_indices(
     dataset: xr.Dataset,
     varname: str = "pr",
+    slice_period: tuple = None,
     slice_mode: str = "ANN",
     chunk_size: Optional[Dict[str, int]] = None,
     verbose: bool = True,
@@ -80,6 +83,13 @@ def rain_indices(
     dataset = convert_units(dataset, varname)
     rain_data = dataset[varname]
 
+    # --- Tentukan slice_periode data
+    if slice_period is None:
+        rain_data = rain_data
+    else:
+        slice_start, slice_end = slice_period
+        rain_data = rain_data.sel(time=slice(slice_start, slice_end))
+
     if chunk_size is not None:
         rain_data = rain_data.chunk(chunk_size)
     elif slice_mode == "year":
@@ -112,12 +122,12 @@ def rain_indices(
     if verbose:
         print(f"[rain_indices] computing {len(lazy_results)} indices in parallel...")
     (computed,) = compute(lazy_results)
-
     return xr.Dataset(computed)
 
 
 def temp_indices(
     dataset: xr.Dataset,
+    slice_period: tuple = None,
     slice_mode: str = "ANN",
     chunk_size: Optional[Dict[str, int]] = None,
     indices: Optional[list] = None,
@@ -143,6 +153,11 @@ def temp_indices(
     dataset : xr.Dataset
         Harus berisi minimal satu dari 'tasmax', 'tasmin', 'tas'
         (tergantung index apa yang diminta).
+    slice_period : tuple(str, str), optional
+        Batasi rentang waktu yang dihitung index-nya, mis.
+        ('2015-01-01', '2100-12-31') untuk dataset yang mencakup
+        historis+skenario tapi index cuma mau dihitung utk periode
+        skenario. Kalau None, pakai seluruh rentang waktu di `dataset`.
     slice_mode : str
         'ANN', 'ME', 'DJF', 'MAM', 'JJA', atau 'SON'.
     chunk_size : dict, optional
@@ -184,6 +199,13 @@ def temp_indices(
             print(f"[temp_indices] preparing variable: {varname}")
         ds_conv = convert_units(dataset, varname)
         var_data = ds_conv[varname]
+
+        # --- Tentukan slice_period data (sebelum chunk/persist, sama
+        # seperti urutan di rain_indices()) ---
+        if slice_period is not None:
+            slice_start, slice_end = slice_period
+            var_data = var_data.sel(time=slice(slice_start, slice_end))
+
         if chunk_size is not None:
             var_data = var_data.chunk(chunk_size)
         elif slice_mode == "year":
@@ -247,9 +269,10 @@ def temp_indices(
     return xr.Dataset(computed)
 
 
-def percentile_indices(
+def temp_percentile_indices(
     dataset: xr.Dataset,
     base_period: tuple,
+    slice_period: tuple = None,
     slice_mode: str = "ANN",
     chunk_size: Optional[Dict[str, int]] = None,
     indices: Optional[list] = None,
@@ -257,7 +280,7 @@ def percentile_indices(
     verbose: bool = True,
 ) -> xr.Dataset:
     """
-    Hitung index suhu berbasis persentil di PERCENTILE_INDICES (config.py):
+    Hitung index suhu berbasis persentil di TEMP_PERCENTILE_INDICES (config.py):
     tg90/tg10/tn90/tn10/tx90/tx10 (+ versi *abs), dan wsdi/csdi.
 
     Berbeda dari `rain_indices()`/`temp_indices()`: fungsi ini butuh
@@ -274,7 +297,16 @@ def percentile_indices(
         dataset yang sama, base_period cuma subset waktunya).
     base_period : tuple(str, str)
         Rentang waktu periode referensi, mis. ('1961-01-01', '1990-12-31').
-        Dioper langsung ke `.sel(time=slice(*base_period))`.
+        Dioper langsung ke `.sel(time=slice(*base_period))`. HARUS berada
+        di dalam rentang waktu `dataset` (bukan `slice_period`) --
+        threshold selalu dihitung dari data PENUH sebelum `slice_period`
+        diterapkan.
+    slice_period : tuple(str, str), optional
+        Batasi rentang waktu yang dihitung index-nya (SETELAH threshold
+        dihitung dari `base_period`), mis. ('2015-01-01', '2100-12-31')
+        untuk dataset historis+skenario yang index-nya cuma mau dihitung
+        utk periode skenario. Kalau None, pakai seluruh rentang waktu di
+        `dataset`.
     slice_mode : str
         'ANN', 'ME', 'DJF', 'MAM', 'JJA', atau 'SON'.
     chunk_size : dict, optional
@@ -282,7 +314,7 @@ def percentile_indices(
         base period selalu di-load ke memori, lihat percentile.py).
     indices : list[str], optional
         Subset nama index (mis. ['tx90', 'wsdi']). None -> semua di
-        PERCENTILE_INDICES.
+        TEMP_PERCENTILE_INDICES.
     window : int
         Lebar window (+-hari) untuk threshold per hari-kalender (default 5).
     verbose : bool
@@ -301,21 +333,22 @@ def percentile_indices(
     ...     slice_mode="ANN", indices=["tx90", "tn10", "wsdi"],
     ... )
     """
-    wanted = indices if indices is not None else list(PERCENTILE_INDICES.keys())
-    unknown = set(wanted) - set(PERCENTILE_INDICES)
+    wanted = indices if indices is not None else list(TEMP_PERCENTILE_INDICES.keys())
+    unknown = set(wanted) - set(TEMP_PERCENTILE_INDICES)
     if unknown:
-        raise KeyError(f"Index tidak dikenal di PERCENTILE_INDICES: {sorted(unknown)}")
+        raise KeyError(f"Index tidak dikenal di TEMP_PERCENTILE_INDICES: {sorted(unknown)}")
 
     base_start, base_end = base_period
 
-    prepared_full: Dict[str, xr.DataArray] = {}                 # var -> full persisted data
+    prepared_full: Dict[str, xr.DataArray] = {}                 # var -> full persisted data (utk threshold)
+    prepared_target: Dict[str, xr.DataArray] = {}               # var -> data yg sudah dipersempit slice_period (utk exceedance/agregasi)
     thresholds: Dict[tuple, xr.DataArray] = {}                  # (var, q) -> threshold_doy
     exceedances: Dict[tuple, xr.DataArray] = {}                 # (var, q, op) -> exceed array
     skipped = []
 
     lazy_results = {}
     for name in wanted:
-        spec = PERCENTILE_INDICES[name]
+        spec = TEMP_PERCENTILE_INDICES[name]
 
         if spec.var not in dataset.variables:
             skipped.append((name, spec.var))
@@ -323,7 +356,7 @@ def percentile_indices(
 
         if spec.var not in prepared_full:
             if verbose:
-                print(f"[percentile_indices] preparing variable: {spec.var}")
+                print(f"[temp_percentile_indices] preparing variable: {spec.var}")
             ds_conv = convert_units(dataset, spec.var)
             var_data = ds_conv[spec.var]
             if chunk_size is not None:
@@ -331,21 +364,30 @@ def percentile_indices(
             var_data = var_data.persist()
             prepared_full[spec.var] = var_data
 
+            # --- Data target (dipersempit slice_period) HANYA dipakai utk
+            # exceedance & agregasi -- threshold tetap dari prepared_full
+            # (data penuh) di atas. ---
+            if slice_period is not None:
+                slice_start, slice_end = slice_period
+                prepared_target[spec.var] = var_data.sel(time=slice(slice_start, slice_end))
+            else:
+                prepared_target[spec.var] = var_data
+
         key_thresh = (spec.var, spec.q)
         if key_thresh not in thresholds:
             if verbose:
-                print(f"[percentile_indices] computing baseline threshold: var={spec.var} q={spec.q}")
+                print(f"[temp_percentile_indices] computing baseline threshold: var={spec.var} q={spec.q}")
             base_data = prepared_full[spec.var].sel(time=slice(base_start, base_end))
             thresholds[key_thresh] = compute_doy_threshold(base_data, spec.q, window=window)
 
         key_exceed = (spec.var, spec.q, spec.op)
         if key_exceed not in exceedances:
             exceedances[key_exceed] = compute_exceedance(
-                prepared_full[spec.var], thresholds[key_thresh], spec.op
+                prepared_target[spec.var], thresholds[key_thresh], spec.op
             )
 
         if verbose:
-            print(f"[percentile_indices] building graph: {name}")
+            print(f"[temp_percentile_indices] building graph: {name}")
         lazy_results[name] = aggregate_index(
             exceedances[key_exceed],
             mode=spec.mode,
@@ -356,7 +398,7 @@ def percentile_indices(
 
     if skipped:
         for name, varname in skipped:
-            print(f"[percentile_indices] SKIP '{name}': variabel '{varname}' tidak ada di dataset.")
+            print(f"[temp_percentile_indices] SKIP '{name}': variabel '{varname}' tidak ada di dataset.")
 
     if not lazy_results:
         raise KeyError(
@@ -365,7 +407,110 @@ def percentile_indices(
         )
 
     if verbose:
-        print(f"[percentile_indices] computing {len(lazy_results)} indices in parallel...")
+        print(f"[temp_percentile_indices] computing {len(lazy_results)} indices in parallel...")
     (computed,) = compute(lazy_results)
 
+    return xr.Dataset(computed)
+
+
+def rain_percentile_indices(
+    dataset: xr.Dataset,
+    base_period: tuple,
+    slice_period: tuple = None,
+    varname: str = "pr",
+    slice_mode: str = "ANN",
+    chunk_size: Optional[Dict[str, int]] = None,
+    indices: Optional[list] = None,
+    wet_day_threshold: float = 1.0,
+    verbose: bool = True,
+) -> xr.Dataset:
+    """
+    Hitung index curah hujan berbasis persentil ETCCDI standar
+    (R95P, R99P, R95PTOT, R99PTOT) -- threshold TETAP dari `base_period`,
+    dipakai sama untuk semua tahun. Lihat rain_percentile.py untuk
+    penjelasan kenapa ini berbeda dari implementasi lama.
+ 
+    Parameters
+    ----------
+    dataset : xr.Dataset
+        Harus berisi variabel `varname` (default 'pr'), mencakup
+        `base_period` MAUPUN periode yang ingin dihitung indexnya.
+    base_period : tuple(str, str)
+        Rentang waktu periode referensi, mis. ('1961-01-01', '1990-12-31').
+    varname : str
+        Nama variabel curah hujan (default 'pr').
+    slice_mode : str
+        'ANN', 'ME', 'DJF', 'MAM', 'JJA', atau 'SON'.
+    chunk_size : dict, optional
+        Chunking eksplisit untuk data periode PENUH.
+    indices : list[str], optional
+        Subset nama index (mis. ['R95P']). None -> semua di RAIN_PERCENTILE_INDICES.
+    wet_day_threshold : float
+        Batas hari "basah" (mm), default 1.0 sesuai definisi ETCCDI.
+    verbose : bool
+        Cetak progress.
+ 
+    Returns
+    -------
+    xr.Dataset berisi index yang berhasil dihitung sebagai data_vars.
+ 
+    Contoh
+    ------
+    >>> result = rain_percentile_indices(
+    ...     ds, base_period=("1961-01-01", "1990-12-31"), slice_mode="ANN",
+    ... )
+    """
+    wanted  = indices if indices is not None else list(RAIN_PERCENTILE_INDICES.keys())
+    unknown = set(wanted) - set(RAIN_PERCENTILE_INDICES)
+    if unknown:
+        raise KeyError(f"Index tidak dikenal di RAIN_PERCENTILE_INDICES: {sorted(unknown)}")
+    if varname not in dataset.variables:
+        raise KeyError(f"Variable '{varname}' not found in the dataset.")
+ 
+    base_start,  base_end  = base_period
+ 
+    # --- Preprocessing (sekali) ---
+    dataset   = convert_units(dataset, varname)
+    rain_data = dataset[varname]
+    if chunk_size is not None:
+        rain_data = rain_data.chunk(chunk_size)
+    rain_data = rain_data.persist()
+ 
+    # --- Threshold TETAP dari base_period, sekali per q yang dibutuhkan ---
+    needed_q   = {RAIN_PERCENTILE_INDICES[name].q for name in wanted}
+    base_data  = rain_data.sel(time=slice(base_start, base_end))
+
+    thresholds = {}
+    for q in needed_q:
+        if verbose:
+            print(f"[rain_percentile_indices] computing baseline threshold: q={q}")
+        thresholds[q] = compute_wet_day_threshold(base_data, q, wet_day_threshold=wet_day_threshold)
+
+    # --- Tentukan slice_periode data
+    if slice_period is None:
+        rain_data = rain_data
+    else:
+        slice_start, slice_end = slice_period
+        rain_data = rain_data.sel(time=slice(slice_start, slice_end))
+        
+    sliced_data = grouped_dataset(rain_data, mode=slice_mode)
+ 
+    # --- Bangun graph lazy untuk semua index ---
+    lazy_results = {}
+    for name in wanted:
+        spec = RAIN_PERCENTILE_INDICES[name]
+        if verbose:
+            print(f"[rain_percentile_indices] building graph: {name}")
+        lazy_results[name] = aggregate_rain_percentile(
+            sliced_data,
+            thresholds[spec.q],
+            mode=spec.mode,
+            wet_day_threshold=wet_day_threshold,
+            name=name,
+        )
+ 
+    if verbose:
+        print(f"[rain_percentile_indices] computing {len(lazy_results)} indices in parallel...")
+    (computed,) = compute(lazy_results)
+ 
     return xr.Dataset(computed)

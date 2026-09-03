@@ -25,7 +25,10 @@ from .config import IndexSpec
 from .ettcdi import FUNC_MAP
 
 
-def _apply_simple(sliced_data: xr.DataArray, spec: IndexSpec, name: str) -> xr.DataArray:
+def _apply_simple(
+        sliced_data: xr.DataArray, 
+        spec: IndexSpec, 
+        name: str) -> xr.DataArray:
     """Index 1-tahap: langsung apply_ufunc(func, data, **params)."""
     func = FUNC_MAP[spec.func]
     result = xr.apply_ufunc(
@@ -55,7 +58,7 @@ def _apply_quantile(
     sama seperti index simple.
     """
     func = FUNC_MAP[spec.func]
-    q = spec.params["q"]
+    q    = spec.params["q"]
 
     result = xr.apply_ufunc(
         func,
