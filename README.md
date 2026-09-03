@@ -15,9 +15,9 @@ from indek_ekstrim import (
 ```
 
 > Rumus matematis tiap index ada di dokumen terpisah:
-> **[`INDEX_FORMULAS.md`](./INDEX_FORMULAS.md)**.
+> **[`INDEX_FORMULAS.md`](./doc/INDEX_FORMULAS.md)**.
 > Panduan menambah index baru ada di:
-> **[`ADDING_NEW_INDEX.md`](./ADDING_NEW_INDEX.md)**.
+> **[`ADDING_NEW_INDEX.md`](./doc/ADDING_NEW_INDEX.md)**.
 
 ---
 
