@@ -395,15 +395,15 @@ Ringkasannya:
 ```
 indek_ekstrim/
 ├── __init__.py         # ekspor API publik
-├── config.py            # SATU-SATUNYA tempat mendaftarkan index (IndexSpec, PercentileIndexSpec, RainPercentileIndexSpec, *_INDICES)
-├── ettcdi.py             # fungsi index individual (1D array -> skalar), + FUNC_MAP
-├── math_utils.py          # helper matematis generik (divide, longest_run, count_days_in_runs)
-├── engine.py               # apply_ufunc wiring untuk IndexSpec kind="simple"/"dual"
-├── percentile.py            # threshold hari-kalender + exceedance + agregasi suhu (TEMP_PERCENTILE_INDICES)
-├── rain_percentile.py        # threshold hari-basah TETAP + agregasi curah hujan (RAIN_PERCENTILE_INDICES)
-├── PreProp.py                  # convert_units, grouped_dataset, deteksi nama koordinat, dll.
-├── pipeline.py                  # 4 entry point publik: rain_indices / temp_indices / temp_percentile_indices / rain_percentile_indices
-└── stations.py                   # adapter DataFrame <-> xr.Dataset untuk data stasiun
+├── config.py           # SATU-SATUNYA tempat mendaftarkan index (IndexSpec, PercentileIndexSpec, RainPercentileIndexSpec, *_INDICES)
+├── ettcdi.py           # fungsi index individual (1D array -> skalar), + FUNC_MAP
+├── math_utils.py       # helper matematis generik (divide, longest_run, count_days_in_runs)
+├── engine.py           # apply_ufunc wiring untuk IndexSpec kind="simple"/"dual"
+├── percentile.py       # threshold hari-kalender + exceedance + agregasi suhu (TEMP_PERCENTILE_INDICES)
+├── rain_percentile.py  # threshold hari-basah TETAP + agregasi curah hujan (RAIN_PERCENTILE_INDICES)
+├── PreProp.py          # convert_units, grouped_dataset, deteksi nama koordinat, dll.
+├── pipeline.py         # 4 entry point publik: rain_indices / temp_indices / temp_percentile_indices / rain_percentile_indices
+└── stations.py         # adapter DataFrame <-> xr.Dataset untuk data stasiun
 ```
 
 Alur data secara umum: **config.py** (deklarasi index) → **pipeline.py**
@@ -416,6 +416,6 @@ hasil.
 
 ## 11. Menambah index baru
 
-Lihat dokumen terpisah: **[`ADDING_NEW_INDEX.md`](./ADDING_NEW_INDEX.md)**
+Lihat dokumen terpisah: **[`ADDING_NEW_INDEX.md`](./doc/ADDING_NEW_INDEX.md)**
 — mencakup 3 pola berbeda (1-variabel, 2-variabel, berbasis persentil)
 lengkap dengan contoh kode & checklist testing.
