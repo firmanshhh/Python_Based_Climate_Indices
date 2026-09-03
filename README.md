@@ -1,4 +1,4 @@
-# indek_ekstrim
+# Python Based Climate Indices
 
 Package untuk menghitung index iklim ekstrem (curah hujan & suhu, gaya
 ETCCDI) dari data `xarray` — baik data **grid** (dims `time, lat, lon`)
